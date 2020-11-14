@@ -3,10 +3,10 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-using TeamspeakClient.Enums;
-using TeamspeakClient.Models;
+using TSClient.Enums;
+using TSClient.Models;
 
-namespace TeamspeakClient.Events {
+namespace TSClient.Events {
     public class NotifyClientMovedEvent : Event {
 
         #region Event Properties

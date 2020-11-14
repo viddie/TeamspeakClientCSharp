@@ -4,7 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace TeamspeakClient.Models {
+namespace TSClient.Models {
     public class ModelAttribute :  Attribute {
         public string AttributeName { get; set; }
         public string TimeStampType { get; set; }

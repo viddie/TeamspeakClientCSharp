@@ -4,7 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace TeamspeakClient.Models {
+namespace TSClient.Models {
     public class BanEntry : TeamspeakModel {
         //banid=104 ip name uid=4rFCcLZ6OzyUpQs1HXBcyweoVAI= mytsid lastnickname=Claus\sLäufer\sUmlaut created=1602977645 duration=0 invokername=philip invokercldbid=7 invokeruid=fX+eZK05tZ+emzm+NhPzugtFMbo= reason enforcements=0
         [Model("banid")]

@@ -3,10 +3,10 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-using TeamspeakClient.Helpers;
-using TeamspeakClient.Models;
+using TSClient.Helpers;
+using TSClient.Models;
 
-namespace TeamspeakClient.Events {
+namespace TSClient.Events {
     public class NotifyBanListEvent : Event {
 
         #region Event Properties

@@ -4,7 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace TeamspeakClient.Events {
+namespace TSClient.Events {
     public class NotifyCurrentServerConnectionChangedEvent : Event {
 
         #region Event Properties

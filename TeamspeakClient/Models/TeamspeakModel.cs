@@ -5,7 +5,7 @@ using System.Reflection;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace TeamspeakClient.Models {
+namespace TSClient.Models {
     public abstract class TeamspeakModel {
 
         public override string ToString() {

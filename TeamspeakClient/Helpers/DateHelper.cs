@@ -4,7 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace TeamspeakClient.Helpers {
+namespace TSClient.Helpers {
     public class DateHelper {
         public static DateTime UnixTimeStampToDateTime(long unixTimeStamp) {
             // Unix timestamp is seconds past epoch

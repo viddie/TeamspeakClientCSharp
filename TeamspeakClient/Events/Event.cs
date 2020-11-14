@@ -5,7 +5,7 @@ using System.Reflection;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace TeamspeakClient.Events {
+namespace TSClient.Events {
 
     public abstract class Event {
 

@@ -4,7 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace TeamspeakClient.Enums {
+namespace TSClient.Enums {
     public enum ClientMoveReason {
         SelfMove = 0,
         AdminMove = 1,

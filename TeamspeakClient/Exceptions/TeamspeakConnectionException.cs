@@ -4,7 +4,8 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace TeamspeakClient.Exceptions {
+namespace TSClient.Exceptions {
+    [Serializable]
     public class TeamspeakConnectionException : Exception {
         public TeamspeakConnectionException() { }
         public TeamspeakConnectionException(string message) : base(message) { }

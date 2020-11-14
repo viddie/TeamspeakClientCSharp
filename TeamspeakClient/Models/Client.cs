@@ -3,9 +3,9 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-using TeamspeakClient.Enums;
+using TSClient.Enums;
 
-namespace TeamspeakClient.Models {
+namespace TSClient.Models {
     public class Client : TeamspeakModel {
 
         //clid=4872 cid=23 client_database_id=11 client_nickname=eɴĸαмα client_type=0
