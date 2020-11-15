@@ -9,6 +9,7 @@ using TSClient.Models;
 namespace TSClient.Helpers {
     public class ModelParser {
         public static TModel ParseModelFromAttributeString<TModel>(string line, TModel instance = default, int startingIndex = 0) {
+            Console.WriteLine($"Parsing model from attribute string '{line}'");
             PropertyInfo[] properties;
             TModel defaultObj = default;
 
@@ -27,6 +28,7 @@ namespace TSClient.Helpers {
             foreach (PropertyInfo property in properties) {
                 ModelAttribute attrib = property.GetCustomAttribute<ModelAttribute>();
                 if (attrib == null) continue;
+                if (!modelAttributes.ContainsKey(attrib.AttributeName)) continue;
 
                 string value = modelAttributes[attrib.AttributeName];
                 property.SetValue(instance, ParsePropertyValue<object>(property.PropertyType, value));

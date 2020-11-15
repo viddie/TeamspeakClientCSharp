@@ -72,20 +72,24 @@ namespace TSClient {
             TelClient.WriteLine(cmd);
         }
 
+        static int i = 0;
         public string SendCommandSync(string cmd) {
-            bool isDone = false;
+            object isDone = $"Command: {cmd} ({i++})";
             Exception exception = null;
             string response = null;
 
 
             SendCommand(cmd, (ex, r) => {
+                Console.WriteLine($"Got response for synchronious message '{isDone}': {r}");
                 exception = ex;
                 response = r;
-                isDone = true;
+                lock (isDone) {
+                    Monitor.Pulse(isDone);
+                }
             });
 
-            while (!isDone) {
-                Thread.Sleep(50);
+            lock (isDone) {
+                Monitor.Wait(isDone);
             }
 
             if (exception != null) {
@@ -149,11 +153,42 @@ namespace TSClient {
             }
         }
 
+        //notifyclientmoved schandlerid=1 ctid=23 reasonid=0 clid=10481  clid=10481 cid=23 client_database_id=9 client_nickname=viddie client_type=0
+        /*
+            > 'clientmove cid=9 clid=10641' (no callback)
+            > 'clientlist' (with callback)
+            < 'clid=10481 cid=23 client_database_id=9 client_nickname=viddie client_type=0|clid=10487 cid=21 client_database_id=7 client_nickname=mave client_type=0|clid=10546 cid=21 client_database_id=582 client_nickname=fly client_type=0|clid=10641 cid=10 client_database_id=834 client_nickname=TeamSpeakUser client_type=0'
+            < 'error id=0 msg=ok'
+            Received full message for command 'clientmove cid=9 clid=10641': clid=10481 cid=23 client_database_id=9 client_nickname=viddie client_type=0|clid=10487 cid=21 client_database_id=7 client_nickname=mave client_type=0|clid=10546 cid=21 client_database_id=582 client_nickname=fly client_type=0|clid=10641 cid=10 client_database_id=834 client_nickname=TeamSpeakUser client_type=0
+            < ''
+            < 'notifyclientmoved schandlerid=1 ctid=9 reasonid=0 clid=10641'
+            Parsing model from attribute string 'notifyclientmoved schandlerid=1 ctid=9 reasonid=0 clid=10641'
+            < ''
+            > 'clientlist' (with callback)
+            < 'clid=10481 cid=23 client_database_id=9 client_nickname=viddie client_type=0|clid=10487 cid=21 client_database_id=7 client_nickname=mave client_type=0|clid=10546 cid=21 client_database_id=582 client_nickname=fly client_type=0|clid=10641 cid=9 client_database_id=834 client_nickname=TeamSpeakUser client_type=0'
+            < 'error id=0 msg=ok'
+            Got response for synchronious message 'Command: clientlist (2)': clid=10481 cid=23 client_database_id=9 client_nickname=viddie client_type=0|clid=10487 cid=21 client_database_id=7 client_nickname=mave client_type=0|clid=10546 cid=21 client_database_id=582 client_nickname=fly client_type=0|clid=10641 cid=9 client_database_id=834 client_nickname=TeamSpeakUser client_type=0
+            < ''
+            Parsing model from attribute string 'clid=10481 cid=23 client_database_id=9 client_nickname=viddie client_type=0'
+            Parsing model from attribute string 'clid=10487 cid=21 client_database_id=7 client_nickname=mave client_type=0'
+            Parsing model from attribute string 'clid=10546 cid=21 client_database_id=582 client_nickname=fly client_type=0'
+            Parsing model from attribute string 'clid=10641 cid=9 client_database_id=834 client_nickname=TeamSpeakUser client_type=0'
+            < 'error id=0 msg=ok'
+            Got response for synchronious message 'Command: clientlist (3)': 
+             */
+
         public void ParseInputLine(string line) {
-            //Console.WriteLine($"< '{line}'");
+            Console.WriteLine($"< '{line}'");
+
+            line = line.Trim();
+
+            if (line.Contains("\n\r") || Response.Contains("\n\r")) {
+                int i = 0;
+            }
 
             if (line.StartsWith("notify") || line.StartsWith("channel")) {
                 ReceivedEvcent(line);
+                return;
             }
 
             if (CommandCallbacks.Count > 0) {
@@ -167,7 +202,8 @@ namespace TSClient {
 
                     } else {
                         IsPerformingCommand = false;
-                        CommandException = new Exception();
+                        Console.WriteLine($"Command did not execute successfully (last line '{line}'). Leftover response: {Response}");
+                        CommandException = new TeamspeakCommandException($"Command did not execute successfully (last line '{line}'). Leftover response: {Response}");
                         callback.Invoke(CommandException, Response);
                     }
 
@@ -178,6 +214,7 @@ namespace TSClient {
                 }
             }
         }
+
 
         public void ReceivedEvcent(string line) {
             string lineList = null;
@@ -208,7 +245,7 @@ namespace TSClient {
 
             if (EventCallbacks.ContainsKey(type)) {
                 foreach (Action<Event> evtCallback in EventCallbacks[type]) {
-                    evtCallback.Invoke(evt);
+                    Task.Run(() => evtCallback.Invoke(evt));
                 }
             }
         }
@@ -227,6 +264,7 @@ namespace TSClient {
             }
 
             string response = SendCommandSync("clientlist");
+
             string[] responseSplit = response.Split(new char[] { '|' });
             AllClients = new List<Client>();
             foreach (string entry in responseSplit) {
@@ -291,6 +329,7 @@ namespace TSClient {
 
 
         /*
+        */
         public static void Main(string[] args) {
             TeamspeakClient client = new TeamspeakClient("localhost", 25639, new CancellationToken());
             client.ConnectClient();
@@ -301,6 +340,7 @@ namespace TSClient {
             RegisterTestEvent(client, typeof(NotifyTalkStatusChangeEvent));
             RegisterTestEvent(client, typeof(NotifyBanListEvent));
             RegisterTestEvent(client, typeof(NotifyMessageEvent));
+            RegisterTestEvent(client, typeof(NotifyClientMovedEvent));
 
             (int clientId, int channelId) = client.GetWhoAmI();
 
@@ -309,6 +349,10 @@ namespace TSClient {
 
             List<Client> inMyChannel = client.GetClientsInChannel(channelId);
             Utils.PrintClientList(inMyChannel);
+
+            Console.WriteLine($"All Clients:");
+            List<Client> clients = client.GetClientList(false);
+            Utils.PrintClientList(clients);
 
             //Task.Run(() => {
             //    while (true) {
@@ -327,7 +371,6 @@ namespace TSClient {
 
             Console.ReadKey();
         }
-        */
 
 
         public static void RegisterTestEvent(TeamspeakClient client, Type eventType) {

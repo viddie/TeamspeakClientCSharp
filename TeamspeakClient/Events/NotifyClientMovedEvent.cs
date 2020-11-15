@@ -16,12 +16,26 @@ namespace TSClient.Events {
 
         [Model("schandlerid")]
         public int ServerConnectionHandlerId { get; set; }
+
+        [Model("ctid")]
         public int ToChannelId { get; set; }
+
+        [Model("reasonid")]
         public ClientMoveReason Reason { get; set; }
+
+        [Model("invokerid")]
         public int InvokerId { get; set; }
+
+        [Model("invokername")]
         public string InvokerName { get; set; }
+
+        [Model("invokeruid")]
         public string InvokerUid { get; set; }
+
+        [Model("reasonmsg")]
         public string ReasonMassage { get; set; }
+
+        [Model("clid")]
         public int ClientId { get; set; }
         #endregion
 
