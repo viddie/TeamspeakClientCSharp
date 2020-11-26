@@ -105,7 +105,7 @@ namespace TSClient.Helpers {
                 string[] parameterPairSplit = parameterPair.Split(new char[] { '=' });
                 string key = parameterPairSplit[0];
                 string value = null;
-                if (parameterPairSplit.Length > 1) value = parameterPairSplit[1];
+                if (parameterPairSplit.Length > 1) value = string.Join("=", parameterPairSplit.Skip(1));
                 parameters.Add(key, value);
             }
 
@@ -120,6 +120,20 @@ namespace TSClient.Helpers {
             value = value.Replace("\\s", " ");
             value = value.Replace("\\p", "|");
             value = value.Replace("\\n", "\n");
+            value = value.Replace("\\/", "/");
+            value = value.Replace("\\t", "\t");
+            return value;
+        }
+
+        public static string ToStringAttribute(string value) {
+            if (value == null)
+                return null;
+
+            value = value.Replace(" ", "\\s");
+            value = value.Replace("|", "\\p");
+            value = value.Replace("\n", "\\n");
+            value = value.Replace("/", "\\/");
+            value = value.Replace("\t", "\\t");
             return value;
         }
     }

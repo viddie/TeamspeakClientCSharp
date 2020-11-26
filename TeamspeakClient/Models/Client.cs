@@ -24,5 +24,8 @@ namespace TSClient.Models {
 
         [Model("client_type")]
         public ClientType Type { get; set; }
+
+        [Model("client_unique_identifier")]
+        public string UniqueId { get; set; }
     }
 }

@@ -6,28 +6,37 @@ using System.Reflection;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using TentacleSoftware.Telnet;
+using TSClient.Enums;
 using TSClient.Events;
 using TSClient.Exceptions;
 using TSClient.Helpers;
 using TSClient.Models;
 
+//auth apikey=CNP7-MPR4-DXYT-92SE-GEXT-3N2F
+
 namespace TSClient {
     public class TeamspeakClient {
 
         #region Connection Stuff
-        public PrimS.Telnet.Client TelClient { get; set; }
+        //public PrimS.Telnet.Client TelClient { get; set; }
+        public TelnetClient TelClient { get; set; }
         public string Host { get; set; }
         public int Port { get; set; }
         public CancellationToken CancelToken { get; set; }
+
+        public Action ConnectionClosedCallback { get; set; }
         #endregion
 
-        private bool ListenerActive { get; set; }
 
         private Dictionary<Type, List<Action<Event>>> EventCallbacks { get; set; } = new Dictionary<Type, List<Action<Event>>>();
-        private Queue<Action<Exception, string>> CommandCallbacks { get; set; } = new Queue<Action<Exception, string>>();
+        private Queue<Tuple<string, Action<Exception, string>>> CommandCallbacks { get; set; } = new Queue<Tuple<string, Action<Exception, string>>>();
+        private Action<Exception, string> CurrentCommand { get; set; }
+
 
         #region Cached Properties
         private List<Client> AllClients;
+        private List<Channel> AllChannels;
         #endregion
 
 
@@ -39,17 +48,16 @@ namespace TSClient {
         }
 
         public void ConnectClient() {
-            TelClient = new PrimS.Telnet.Client(Host, Port, CancelToken);
-            if (!TelClient.IsConnected) {
-                throw new TeamspeakConnectionException("Could not open Telnet connection to client");
-            }
-
-            ListenerActive = true;
-            new Thread(new ThreadStart(ListenToClient)).Start();
+            TelClient = new TelnetClient(Host, Port, TimeSpan.Zero, CancelToken);
+            TelClient.Connect().Wait();
+            TelClient.ConnectionClosed += OnConnectionClosed;
+            TelClient.MessageReceived += OnMessageReceived;
         }
 
         public void CloseClient() {
             SendCommand("quit");
+            TelClient.Disconnect();
+            TelClient.Dispose();
         }
         public void CleanupClient() {
             TelClient.Dispose();
@@ -60,17 +68,32 @@ namespace TSClient {
         }
 
 
+        private object LastCallLock = new object();
         public void SendCommand(string cmd, Action<Exception, string> callback=null) {
             string withCallback = callback == null ? "no callback" : "with callback";
-            Console.WriteLine($"> '{cmd}' ({withCallback})");
 
             if (callback == null) {
                 callback = (ex, s) => GenericCallback(cmd, ex, s);
             }
 
-            CommandCallbacks.Enqueue(callback);
-            TelClient.WriteLine(cmd);
+
+            lock (LastCallLock) {
+                if (CurrentCommand != null) {
+                    CommandCallbacks.Enqueue(Tuple.Create(cmd, callback));
+                } else {
+                    DoSendCommand(cmd, callback);
+                }
+            }
         }
+        public void DoSendCommand(string cmd, Action<Exception, string> callback) {
+            CurrentCommand = callback;
+            Console.WriteLine($"> '{cmd}'");
+
+            cmd += "\n";
+
+            TelClient.Send(cmd);
+        }
+
 
         static int i = 0;
         public string SendCommandSync(string cmd) {
@@ -79,16 +102,15 @@ namespace TSClient {
             string response = null;
 
 
-            SendCommand(cmd, (ex, r) => {
-                Console.WriteLine($"Got response for synchronious message '{isDone}': {r}");
-                exception = ex;
-                response = r;
-                lock (isDone) {
-                    Monitor.Pulse(isDone);
-                }
-            });
-
             lock (isDone) {
+                SendCommand(cmd, (ex, r) => {
+                    Console.WriteLine($"Got response for synchronious message '{isDone}': {r}");
+                    exception = ex;
+                    response = r;
+                    lock (isDone) {
+                        Monitor.Pulse(isDone);
+                    }
+                });
                 Monitor.Wait(isDone);
             }
 
@@ -121,93 +143,50 @@ namespace TSClient {
         #region Communication Listening
         private Exception CommandException { get; set; }
         private string Response { get; set; } = "";
-        private bool IsPerformingCommand { get; set; }
 
-        public void ListenToClient() {
-            while (ListenerActive) {
-                string answer;
-                try {
-                    answer = TelClient.ReadAsync().Result;
-                } catch (Exception) {
-                    return;
-                }
 
-                if (string.IsNullOrEmpty(answer)) continue;
-
-                string enc = "Windows-1252";
-                //string enc = "iso-8859-1";
-
-                //Dictionary<string, string> encResults = new Dictionary<string, string>();
-                //foreach (EncodingInfo info in Encoding.GetEncodings()) {
-                //    string encName = info.Name;
-                //    Encoding enc = info.GetEncoding();
-                //    string asUTF8 = Encoding.UTF8.GetString(enc.GetBytes(answer));
-                //    if (!encResults.ContainsKey(encName))
-                //        encResults.Add(encName, asUTF8);
-                //}
-
-                answer = Encoding.UTF8.GetString(Encoding.GetEncoding(enc).GetBytes(answer));
-
-                string[] lines = answer.Split(new string[] { "\n\r" }, StringSplitOptions.None);
-                foreach (string line in lines) ParseInputLine(line.Trim());
-            }
+        public void OnConnectionClosed(object sender, object args) {
+            Console.WriteLine("Connection was closed!");
+            ConnectionClosedCallback?.Invoke();
         }
 
-        //notifyclientmoved schandlerid=1 ctid=23 reasonid=0 clid=10481  clid=10481 cid=23 client_database_id=9 client_nickname=viddie client_type=0
-        /*
-            > 'clientmove cid=9 clid=10641' (no callback)
-            > 'clientlist' (with callback)
-            < 'clid=10481 cid=23 client_database_id=9 client_nickname=viddie client_type=0|clid=10487 cid=21 client_database_id=7 client_nickname=mave client_type=0|clid=10546 cid=21 client_database_id=582 client_nickname=fly client_type=0|clid=10641 cid=10 client_database_id=834 client_nickname=TeamSpeakUser client_type=0'
-            < 'error id=0 msg=ok'
-            Received full message for command 'clientmove cid=9 clid=10641': clid=10481 cid=23 client_database_id=9 client_nickname=viddie client_type=0|clid=10487 cid=21 client_database_id=7 client_nickname=mave client_type=0|clid=10546 cid=21 client_database_id=582 client_nickname=fly client_type=0|clid=10641 cid=10 client_database_id=834 client_nickname=TeamSpeakUser client_type=0
-            < ''
-            < 'notifyclientmoved schandlerid=1 ctid=9 reasonid=0 clid=10641'
-            Parsing model from attribute string 'notifyclientmoved schandlerid=1 ctid=9 reasonid=0 clid=10641'
-            < ''
-            > 'clientlist' (with callback)
-            < 'clid=10481 cid=23 client_database_id=9 client_nickname=viddie client_type=0|clid=10487 cid=21 client_database_id=7 client_nickname=mave client_type=0|clid=10546 cid=21 client_database_id=582 client_nickname=fly client_type=0|clid=10641 cid=9 client_database_id=834 client_nickname=TeamSpeakUser client_type=0'
-            < 'error id=0 msg=ok'
-            Got response for synchronious message 'Command: clientlist (2)': clid=10481 cid=23 client_database_id=9 client_nickname=viddie client_type=0|clid=10487 cid=21 client_database_id=7 client_nickname=mave client_type=0|clid=10546 cid=21 client_database_id=582 client_nickname=fly client_type=0|clid=10641 cid=9 client_database_id=834 client_nickname=TeamSpeakUser client_type=0
-            < ''
-            Parsing model from attribute string 'clid=10481 cid=23 client_database_id=9 client_nickname=viddie client_type=0'
-            Parsing model from attribute string 'clid=10487 cid=21 client_database_id=7 client_nickname=mave client_type=0'
-            Parsing model from attribute string 'clid=10546 cid=21 client_database_id=582 client_nickname=fly client_type=0'
-            Parsing model from attribute string 'clid=10641 cid=9 client_database_id=834 client_nickname=TeamSpeakUser client_type=0'
-            < 'error id=0 msg=ok'
-            Got response for synchronious message 'Command: clientlist (3)': 
-             */
+        public void OnMessageReceived(object sender, string answer) {
+            if (string.IsNullOrEmpty(answer)) return;
+
+            string[] lines = answer.Split(new string[] { "\n\r" }, StringSplitOptions.None);
+            foreach (string line in lines) ParseInputLine(line.Trim());
+        }
+
 
         public void ParseInputLine(string line) {
             Console.WriteLine($"< '{line}'");
 
             line = line.Trim();
 
-            if (line.Contains("\n\r") || Response.Contains("\n\r")) {
-                int i = 0;
-            }
-
             if (line.StartsWith("notify") || line.StartsWith("channel")) {
                 ReceivedEvcent(line);
                 return;
             }
 
-            if (CommandCallbacks.Count > 0) {
+            if (CurrentCommand != null) {
                 if (line.StartsWith("error")) {
-                    Action<Exception, string> callback = CommandCallbacks.Dequeue();
                     Response = Response.Trim();
 
                     if (line.EndsWith("ok")) {
-                        IsPerformingCommand = false;
-                        callback.Invoke(null, Response);
+                        CurrentCommand.Invoke(null, Response);
 
                     } else {
-                        IsPerformingCommand = false;
                         Console.WriteLine($"Command did not execute successfully (last line '{line}'). Leftover response: {Response}");
                         CommandException = new TeamspeakCommandException($"Command did not execute successfully (last line '{line}'). Leftover response: {Response}");
-                        callback.Invoke(CommandException, Response);
+                        CurrentCommand.Invoke(CommandException, Response);
                     }
 
                     Response = "";
+                    CurrentCommand = null;
+                    if (CommandCallbacks.Count > 0) {
+                        (string cmd, Action<Exception, string> callback) = CommandCallbacks.Dequeue();
+                        DoSendCommand(cmd, callback);
+                    }
 
                 } else {
                     Response += $"{line}\n\r";
@@ -263,7 +242,7 @@ namespace TSClient {
                 return AllClients;
             }
 
-            string response = SendCommandSync("clientlist");
+            string response = SendCommandSync("clientlist -uid");
 
             string[] responseSplit = response.Split(new char[] { '|' });
             AllClients = new List<Client>();
@@ -294,15 +273,116 @@ namespace TSClient {
 
             List<Client> toRet = new List<Client>();
 
+            DateTime start = DateTime.Now;
             foreach (Client client in baseList) {
-                if (IsClientInputMuted(client) || IsClientOutputMuted(client)) {
+                if (!IsClientInputMuted(client) && !IsClientOutputMuted(client)) {
                     toRet.Add(client);
+                }
+                DateTime after = DateTime.Now;
+                Console.WriteLine($"Time after client: {after - start}");
+            }
+            DateTime end = DateTime.Now;
+            Console.WriteLine($"Time diff: {end - start}");
+
+            return toRet;
+        }
+
+        public Client GetClientById(int id, bool fromCache = true) {
+            List<Client> clients = GetClientList(fromCache);
+
+            foreach (Client client in clients) {
+                if (client.Id == id) {
+                    return client;
+                }
+            }
+
+            return null;
+        }
+        public List<Client> GetClientsByNamePart(string name, bool fromCache = true) {
+            if (name == null) throw new ArgumentNullException("name");
+
+            List<Client> clients = GetClientList(fromCache);
+            List<Client> toRet = new List<Client>();
+
+            name = name.ToLower();
+
+            foreach (Client client in clients) {
+                if (client.Nickname.ToLower().Contains(name)) {
+                    toRet.Add(client);
+                }
+                if (client.UniqueId.ToLower() == name) {
+                    return new List<Client>() { client };
+                }
+                if (client.Nickname == name) {
+                    return new List<Client>() { client };
                 }
             }
 
             return toRet;
         }
+        public Client GetClientByNamePart(string name, bool fromCache = true) {
+            List<Client> clients = GetClientsByNamePart(name, fromCache);
 
+            if (clients.Count == 0) throw new NoTargetsFoundException(name);
+            else if (clients.Count > 1) throw new MultipleTargetsFoundException(name) { AllFoundTargets = clients };
+
+            return clients[0];
+        }
+
+
+        public List<Channel> GetChannelList(bool fromCache = true) {
+            if (fromCache && AllChannels != null) {
+                return AllChannels;
+            }
+
+            string response = SendCommandSync("channellist -topic -flags -voice -limits");
+
+            string[] responseSplit = response.Split(new char[] { '|' });
+            AllChannels = new List<Channel>();
+            foreach (string entry in responseSplit) {
+                AllChannels.Add(ModelParser.ParseModelFromAttributeString<Channel>(entry));
+            }
+
+            return AllChannels;
+        }
+
+        public Channel GetChannelById(int id, bool fromCache = true) {
+            List<Channel> channels = GetChannelList(fromCache);
+
+            foreach (Channel channel in channels) {
+                if (channel.Id == id) {
+                    return channel;
+                }
+            }
+
+            return null;
+        }
+
+        public Channel GetParentChannel(Channel ch, bool fromCache = true) {
+            if (ch.ParentChannelId == 0) return null; //Parent channel id = 0 means the channel is sitting at the TS servers root, meaning there is no parent channel
+
+            List<Channel> channels = GetChannelList(fromCache);
+
+            foreach (Channel channel in channels) {
+                if (channel.Id == ch.ParentChannelId) {
+                    return channel;
+                }
+            }
+
+            return null;
+        }
+
+        public Channel GetChannelByName(string name, bool fromCache = true) {
+            List<Channel> channels = GetChannelList(fromCache);
+
+            foreach (Channel channel in channels) {
+                if (channel.Name == name) {
+                    return channel;
+                }
+            }
+
+            return null;
+        }
         #endregion
 
         #region Client Calls
@@ -321,6 +401,23 @@ namespace TSClient {
             Dictionary<string, string> resultWhoami = ModelParser.ParseAttributeList(SendCommandSync("whoami"));
             return ModelParser.ParseAttributeTuple<int, int>(resultWhoami["clid"], resultWhoami["cid"]);
         }
+
+
+        public void SendTextMessage(MessageMode mode, string message, int targetId=-1) {
+            message = ModelParser.ToStringAttribute(message);
+            string target = targetId == -1 ? "" : $" target={targetId}";
+
+            SendCommand($"sendtextmessage targetmode={(int)mode} msg={message}{target}");
+        }
+        public void SendPrivateMessage(string message, int targetId) {
+            SendTextMessage(MessageMode.Private, message, targetId);
+        }
+        public void SendChannelMessage(string message) {
+            SendTextMessage(MessageMode.Channel, message);
+        }
+        public void SendServerMessage(string message) {
+            SendTextMessage(MessageMode.Server, message);
+        }
         #endregion
 
 
@@ -333,6 +430,9 @@ namespace TSClient {
         public static void Main(string[] args) {
             TeamspeakClient client = new TeamspeakClient("localhost", 25639, new CancellationToken());
             client.ConnectClient();
+
+            Thread.Sleep(1000);
+
             client.AuthorizeClient("CNP7-MPR4-DXYT-92SE-GEXT-3N2F");
 
             //List<Client> clients = client.GetClientList();

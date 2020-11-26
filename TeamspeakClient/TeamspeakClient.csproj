@@ -51,6 +51,7 @@
   <ItemGroup>
     <Compile Include="Enums\ClientMoveReason.cs" />
     <Compile Include="Enums\ClientType.cs" />
+    <Compile Include="Enums\MessageMode.cs" />
     <Compile Include="Enums\TalkStatus.cs" />
     <Compile Include="Events\ChannelListEvent.cs" />
     <Compile Include="Events\ChannelListFinishedEvent.cs" />
@@ -83,6 +84,8 @@
     <Compile Include="Events\NotifyTalkStatusChangeEvent.cs" />
     <Compile Include="Events\NotifyTextMessageEvent.cs" />
     <Compile Include="Events\TestEvent.cs" />
+    <Compile Include="Exceptions\MultipleTargetsFoundException.cs" />
+    <Compile Include="Exceptions\NoTargetsFoundException.cs" />
     <Compile Include="Exceptions\TeamspeakCommandException.cs" />
     <Compile Include="Exceptions\TeamspeakConnectionException.cs" />
     <Compile Include="Exceptions\TeamspeakEventException.cs" />
@@ -96,6 +99,7 @@
     <Compile Include="Models\TeamspeakModel.cs" />
     <Compile Include="TeamspeakClient.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="TelnetClient.cs" />
   </ItemGroup>
   <ItemGroup>
     <Content Include="License.txt" />
